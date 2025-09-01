@@ -71,8 +71,9 @@ def register():
             c.execute("INSERT INTO users (username, password_hash, secret) VALUES (?, ?, ?)",
                       (username, generate_password_hash(password), secret))
             conn.commit()
+            session['username'] = username  # Đăng nhập luôn sau khi đăng ký
             flash("Đăng ký thành công! Secret của bạn: " + secret)
-            return redirect(url_for('login'))
+            return redirect(url_for('dashboard'))  # Chuyển sang dashboard để xem mã QR
         except sqlite3.IntegrityError:
             flash("Username đã tồn tại!")
         finally:
