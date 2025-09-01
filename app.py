@@ -17,6 +17,8 @@ app.secret_key = secrets.token_hex(16)
 
 def get_db_conn():
     db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable not set")
     return psycopg2.connect(db_url, cursor_factory=RealDictCursor)
 
 def init_db():
