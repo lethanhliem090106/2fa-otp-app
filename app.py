@@ -79,7 +79,7 @@ def register():
         conn = get_db_conn()
         c = conn.cursor()
         try:
-            c.execute("INSERT INTO users (username, password_hash, secret) VALUES (?, ?, ?)",
+            c.execute("INSERT INTO users (username, password_hash, secret) VALUES (%s, %s, %s)",
                       (username, generate_password_hash(password), secret))
             conn.commit()
             session['username'] = username
