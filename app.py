@@ -105,9 +105,9 @@ def login():
         c.execute("SELECT password_hash, secret, hotp_counter FROM users WHERE username=%s", (username,))
         user = c.fetchone()
         conn.close()
-        if user and check_password_hash(user[0], password):
-            totp_code = totp(user[1])
-            hotp_code = hotp(user[1], user[2])
+        if user and check_password_hash(user['password_hash'], password):
+            totp_code = totp(user['secret'])
+            hotp_code = hotp(user['secret'], user['hotp_counter'])
             if otp == totp_code or otp == hotp_code:
                 if otp == hotp_code:
                     conn = get_db_conn()
