@@ -1,3 +1,4 @@
+import os
 import secrets
 import sqlite3
 import base64
@@ -11,11 +12,14 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = secrets.token_hex(16)  # Secret cho session
+app.secret_key = secrets.token_hex(16)
 
-# Khởi tạo DB SQLite
+def get_db_conn():
+    db_path = os.path.join(os.path.dirname(__file__), 'users.db')
+    return sqlite3.connect(db_path)
+
 def init_db():
-    conn = sqlite3.connect('users.db')
+    conn = get_db_conn()
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (username TEXT PRIMARY KEY, password_hash TEXT, secret TEXT, hotp_counter INTEGER DEFAULT 0)''')
@@ -65,15 +69,15 @@ def register():
             flash("Vui lòng nhập đầy đủ thông tin!")
             return render_template("register.html")
         secret = generate_secret()
-        conn = sqlite3.connect('users.db')
+        conn = get_db_conn()
         c = conn.cursor()
         try:
             c.execute("INSERT INTO users (username, password_hash, secret) VALUES (?, ?, ?)",
                       (username, generate_password_hash(password), secret))
             conn.commit()
-            session['username'] = username  # Đăng nhập luôn sau khi đăng ký
+            session['username'] = username
             flash("Đăng ký thành công! Secret của bạn: " + secret)
-            return redirect(url_for('dashboard'))  # Chuyển sang dashboard để xem mã QR
+            return redirect(url_for('dashboard'))
         except sqlite3.IntegrityError:
             flash("Username đã tồn tại!")
         finally:
@@ -89,7 +93,7 @@ def login():
         if not username or not password or not otp:
             flash("Vui lòng nhập đầy đủ thông tin!")
             return render_template("login.html")
-        conn = sqlite3.connect('users.db')
+        conn = get_db_conn()
         c = conn.cursor()
         c.execute("SELECT password_hash, secret, hotp_counter FROM users WHERE username=?", (username,))
         user = c.fetchone()
@@ -99,7 +103,7 @@ def login():
             hotp_code = hotp(user[1], user[2])
             if otp == totp_code or otp == hotp_code:
                 if otp == hotp_code:
-                    conn = sqlite3.connect('users.db')
+                    conn = get_db_conn()
                     c = conn.cursor()
                     c.execute("UPDATE users SET hotp_counter = hotp_counter + 1 WHERE username=?", (username,))
                     conn.commit()
@@ -116,7 +120,7 @@ def login():
 def dashboard():
     if 'username' not in session:
         return redirect(url_for('login'))
-    conn = sqlite3.connect('users.db')
+    conn = get_db_conn()
     c = conn.cursor()
     c.execute("SELECT secret, hotp_counter FROM users WHERE username=?", (session['username'],))
     user = c.fetchone()
