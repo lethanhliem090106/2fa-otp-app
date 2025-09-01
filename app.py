@@ -1,12 +1,12 @@
+import secrets
+import sqlite3
+import base64
+import struct
 import hmac
 import hashlib
 import time
-import struct
-import base64
-import secrets
-import qrcode
 import io
-import sqlite3
+import qrcode
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
