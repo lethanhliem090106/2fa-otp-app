@@ -18,9 +18,17 @@ app.secret_key = secrets.token_hex(16)
 def get_db_conn():
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        raise ValueError("DATABASE_URL environment variable not set")
-    return psycopg2.connect(db_url, cursor_factory=RealDictCursor)
-
+        # Trong production, không raise error ngay
+        print("Warning: DATABASE_URL not set")
+        return None
+    
+    # Render sử dụng postgresql:// nhưng psycopg2 cần postgresql://
+    # Nếu cần, có thể convert format
+    try:
+        return psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
 def init_db():
     conn = get_db_conn()
     c = conn.cursor()
