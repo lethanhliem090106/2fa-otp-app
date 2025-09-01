@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+    <h1>Dashboard: OTP Của Bạn</h1>
+    <p><strong>Secret:</strong> <span class="text-danger">{{ secret }}</span></p>
+    <img src="{{ qr_data }}" alt="QR Code cho TOTP" class="qr">
+    <p>Scan QR bằng Google Authenticator.</p>
+    <div class="otp">TOTP Hiện Tại: {{ totp_code }}</div>
+    <p>Thời gian còn lại: <span class="badge bg-warning text-dark">{{ remaining }} giây</span></p>
+    <div class="otp">HOTP Tiếp Theo (Counter {{ hotp_counter }}): {{ hotp_code }}</div>
+    <script>
+        setTimeout(() => location.reload(), {{ remaining * 1000 }});
+    </script>
+{% endblock %}
