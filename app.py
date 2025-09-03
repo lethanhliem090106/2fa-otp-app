@@ -1,7 +1,6 @@
 import os
 import secrets
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import sqlite3
 import base64
 import struct
 import hmac
@@ -15,20 +14,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
+# Đổi sang SQLite
 def get_db_conn():
-    db_url = os.environ.get("DATABASE_URL")
-    if not db_url:
-        # Trong production, không raise error ngay
-        print("Warning: DATABASE_URL not set")
-        return None
-    
-    # Render sử dụng postgresql:// nhưng psycopg2 cần postgresql://
-    # Nếu cần, có thể convert format
-    try:
-        return psycopg2.connect(db_url, cursor_factory=RealDictCursor)
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return None
+    conn = sqlite3.connect('otp_app.db')
+    conn.row_factory = sqlite3.Row  # Để trả về dict thay vì tuple
+    return conn
+
 def init_db():
     conn = get_db_conn()
     c = conn.cursor()
@@ -46,7 +37,7 @@ def init_db():
 init_db()
 
 def hotp(secret: str, counter: int, digits: int = 6) -> str:
-    key = base64.b32decode(secret.upper(), True)
+    key = base64.b32decode(secret.upper() + '=' * ((8 - len(secret)) % 8))
     msg = struct.pack(">Q", counter)
     hash_value = hmac.new(key, msg, hashlib.sha1).digest()
     offset = hash_value[-1] & 0xF
@@ -85,17 +76,18 @@ def register():
         if not username or not password:
             flash("Vui lòng nhập đầy đủ thông tin!")
             return render_template("register.html")
+        
         secret = generate_secret()
         conn = get_db_conn()
         c = conn.cursor()
         try:
-            c.execute("INSERT INTO users (username, password_hash, secret) VALUES (%s, %s, %s)",
+            c.execute("INSERT INTO users (username, password_hash, secret) VALUES (?, ?, ?)",
                       (username, generate_password_hash(password), secret))
             conn.commit()
             session['username'] = username
             flash("Đăng ký thành công! Secret của bạn: " + secret)
             return redirect(url_for('dashboard'))
-        except psycopg2.IntegrityError:
+        except sqlite3.IntegrityError:
             flash("Username đã tồn tại!")
         finally:
             conn.close()
@@ -110,19 +102,22 @@ def login():
         if not username or not password or not otp:
             flash("Vui lòng nhập đầy đủ thông tin!")
             return render_template("login.html")
+        
         conn = get_db_conn()
         c = conn.cursor()
-        c.execute("SELECT password_hash, secret, hotp_counter FROM users WHERE username=%s", (username,))
+        c.execute("SELECT password_hash, secret, hotp_counter FROM users WHERE username=?", (username,))
         user = c.fetchone()
         conn.close()
+        
         if user and check_password_hash(user['password_hash'], password):
             totp_code = totp(user['secret'])
             hotp_code = hotp(user['secret'], user['hotp_counter'])
+            
             if otp == totp_code or otp == hotp_code:
                 if otp == hotp_code:
                     conn = get_db_conn()
                     c = conn.cursor()
-                    c.execute("UPDATE users SET hotp_counter = hotp_counter + 1 WHERE username=%s", (username,))
+                    c.execute("UPDATE users SET hotp_counter = hotp_counter + 1 WHERE username=?", (username,))
                     conn.commit()
                     conn.close()
                 session['username'] = username
@@ -137,20 +132,24 @@ def login():
 def dashboard():
     if 'username' not in session:
         return redirect(url_for('login'))
+    
     conn = get_db_conn()
     c = conn.cursor()
-    c.execute("SELECT secret, hotp_counter FROM users WHERE username=%s", (session['username'],))
+    c.execute("SELECT secret, hotp_counter FROM users WHERE username=?", (session['username'],))
     user = c.fetchone()
     conn.close()
+    
     if not user:
         flash("Không tìm thấy user!")
         return redirect(url_for('logout'))
+    
     secret = user['secret']
     hotp_counter = user['hotp_counter']
     qr_data = generate_qr(secret, session['username'])
     totp_code = totp(secret)
     hotp_code = hotp(secret, hotp_counter)
     remaining = time_remaining()
+    
     return render_template("dashboard.html", qr_data=qr_data, totp_code=totp_code, hotp_code=hotp_code,
                            remaining=remaining, secret=secret, hotp_counter=hotp_counter)
 
@@ -160,4 +159,4 @@ def logout():
     return redirect(url_for('index'))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
